@@ -63,7 +63,7 @@ exports.main = async function (params) {
     const auth = (host && pass) ? 'Basic ' + Buffer.from(`${user}:${pass}`).toString('base64') : undefined;
     const apiSecret = process.env.IPFS_API_SECRET || params.IPFS_API_SECRET;
     const headers = auth ? (apiSecret ? { Authorization: auth, 'X-API-SECRET': apiSecret } : { Authorization: auth }) : undefined;
-    const mfsPath = process.env.IPFS_MFS_MANIFEST_PATH || params.IPFS_MFS_MANIFEST_PATH || '/manifest/latest.json';
+    const mfsPath = process.env.IPFS_MFS_MANIFEST_PATH || params.IPFS_MFS_MANIFEST_PATH || '/manifests/latest.json';
 
     if (method === 'GET') {
       // F) Fetch a specific project JSON by CID (prefer dweb)

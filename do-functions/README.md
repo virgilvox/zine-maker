@@ -22,7 +22,7 @@ Environment Variables (Functions component):
 - `IPFS_DROPLET_ADMIN_USER` (default: ipfsadmin)
 - `IPFS_DROPLET_ADMIN_PASS` (required, secret)
 - `IPFS_API_SECRET` (optional, secret): extra header `X-API-SECRET`
-- `IPFS_MFS_MANIFEST_PATH` (default: `/manifest/latest.json`)
+- `IPFS_MFS_MANIFEST_PATH` (default: `/manifests/latest.json`)
 - `IPFS_IPNS_KEY` (default: `manifest-key`)
 - `REGISTRY_CID` (optional): default read pointer (CID or `ipns/k51...`)
 
