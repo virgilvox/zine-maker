@@ -117,17 +117,20 @@ exports.main = async function (params) {
           }
         } catch {}
       }
-      // D) Get IPNS id for manifest-key
+      // D) Get IPNS id - resolve key name to ID if needed
       let manifestId = undefined;
-      const ipnsId = process.env.IPFS_IPNS_KEY || params.IPFS_IPNS_KEY;
-      if (ipnsId && typeof ipnsId === 'string' && ipnsId.startsWith('k51')) {
-        manifestId = ipnsId;
+      const ipnsKey = process.env.IPFS_IPNS_KEY || params.IPFS_IPNS_KEY;
+      if (ipnsKey && typeof ipnsKey === 'string' && ipnsKey.startsWith('k51')) {
+        // Already an IPNS ID
+        manifestId = ipnsKey;
       } else if (API && headers) {
         try {
           const list = await fetch(`${API}/key/list`, { method: 'POST', headers });
           if (list.ok) {
             const j = await list.json();
-            manifestId = (j?.Keys || []).find(k => k?.Name === 'manifest-key')?.Id;
+            // If it's a key name, find the ID; otherwise look for 'manifest-key'
+            const keyName = ipnsKey || 'manifest-key';
+            manifestId = (j?.Keys || []).find(k => k?.Name === keyName)?.Id;
           } else {
             const body = await list.text().catch(() => '');
             console.error('[registry] key/list failed', { status: list.status, body: body?.slice?.(0, 200) });
