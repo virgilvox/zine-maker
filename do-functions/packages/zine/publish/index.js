@@ -17,7 +17,7 @@ function dropletConfig(params) {
   const host = process.env.IPFS_DROPLET_HOST || params.IPFS_DROPLET_HOST;
   const pass = process.env.IPFS_DROPLET_ADMIN_PASS || params.IPFS_DROPLET_ADMIN_PASS;
   const user = process.env.IPFS_DROPLET_ADMIN_USER || params.IPFS_DROPLET_ADMIN_USER || 'ipfsadmin';
-  const ipnsKey = process.env.IPFS_IPNS_KEY || params.IPFS_IPNS_KEY || 'manifest-key';
+  const ipnsKey = process.env.IPFS_IPNS_KEY || params.IPFS_IPNS_KEY;
   const mfsPath = process.env.IPFS_MFS_MANIFEST_PATH || params.IPFS_MFS_MANIFEST_PATH || '/manifests/latest.json';
   const apiSecret = process.env.IPFS_API_SECRET || params.IPFS_API_SECRET;
   if (!host || !pass || !apiSecret) return null;
