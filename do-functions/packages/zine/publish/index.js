@@ -129,6 +129,9 @@ exports.main = async function (params) {
     if (!dc) {
       return { statusCode: 400, headers: TEXT_HEADERS, body: { error: 'Missing IPFS droplet configuration (host/pass/secret)' } };
     }
+    if (!dc.ipnsKey) {
+      return { statusCode: 400, headers: TEXT_HEADERS, body: { error: 'Missing IPFS_IPNS_KEY' } };
+    }
 
     const payload = typeof params.__ow_body === 'string'
       ? JSON.parse(Buffer.from(params.__ow_body, 'base64').toString('utf8'))
@@ -162,37 +165,35 @@ exports.main = async function (params) {
 
     // Read/normalize registry, upsert entry, write, stat, publish
     let registryCid;
-    let registryError;
-    try {
-      let current = await dropletFilesRead(dc, dc.mfsPath);
-      current = coerceRegistryShape(current);
-      const entryKey = manifestCid;
+    let current = await dropletFilesRead(dc, dc.mfsPath);
+    current = coerceRegistryShape(current);
+    const entryKey = manifestCid;
 
-      // de-dup by key then append
-      const byKey = new Map();
-      for (const e of current.entries) {
-        const k = e.manifestCid || e.cid || e.id || e.title;
-        if (k && k !== entryKey) byKey.set(k, e);
-      }
-      byKey.set(entryKey, {
-        title: manifest.title,
-        name: manifest.title,
-        description: manifest.description,
-        author: manifest.author?.name || manifest.author?.contact || undefined,
-        manifestCid,
-        projectCid,
-        tags: manifest.tags || [],
-        createdAt: new Date().toISOString()
-      });
-      current.entries = Array.from(byKey.values());
-
-      await dropletFilesWrite(dc, dc.mfsPath, JSON.stringify(current));
-      registryCid = await dropletFilesStat(dc, dc.mfsPath);
-      await dropletPublishIpns(dc, registryCid);
-    } catch (e) {
-      registryError = e?.message || String(e);
-      console.error('[publish] registry/ipns failed:', registryError);
+    // de-dup by key then append
+    const byKey = new Map();
+    for (const e of current.entries) {
+      const k = e.manifestCid || e.cid || e.id || e.title;
+      if (k && k !== entryKey) byKey.set(k, e);
     }
+    byKey.set(entryKey, {
+      title: manifest.title,
+      name: manifest.title,
+      description: manifest.description,
+      author: manifest.author?.name || manifest.author?.contact || undefined,
+      manifestCid,
+      projectCid,
+      tags: manifest.tags || [],
+      createdAt: new Date().toISOString()
+    });
+    current.entries = Array.from(byKey.values());
+
+    await dropletFilesWrite(dc, dc.mfsPath, JSON.stringify(current));
+    registryCid = await dropletFilesStat(dc, dc.mfsPath);
+
+    // Log where we are publishing and with which key (helps verify same as registry)
+    console.log('[publish] publishing registry', { mfsPath: dc.mfsPath, registryCid });
+
+    await dropletPublishIpns(dc, registryCid);
 
     const link = (cid) => cid ? `${dc.GW}/ipfs/${cid}` : undefined;
     return {
@@ -201,12 +202,11 @@ exports.main = async function (params) {
       body: {
         projectCid, manifestCid, backupCid,
         links: { project: link(projectCid), manifest: link(manifestCid), backup: link(backupCid) },
-        registryCid, registryPath: dc.mfsPath,
-        registryError: registryError || null
+        registryCid, registryPath: dc.mfsPath
       }
     };
   } catch (e) {
     const msg = e?.message || 'Server error';
-    return { statusCode: 400, headers: TEXT_HEADERS, body: { error: msg } };
+    return { statusCode: 500, headers: TEXT_HEADERS, body: { error: msg } };
   }
 };
