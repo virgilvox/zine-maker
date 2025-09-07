@@ -40,15 +40,9 @@ async function dropletAddJson(dc, name, obj) {
 
 async function dropletFilesRead(dc, path) {
   const r = await fetch(`${dc.API}/files/read?arg=${encodeURIComponent(path)}`, { method: 'POST', headers: dc.headers });
-  if (r.ok) {
-    const t = await r.text();
-    try { return JSON.parse(t); } catch {}
-  }
-  // fallback: stat -> gateway fetch
-  const cid = await dropletFilesStat(dc, path);
-  const r2 = await fetch(`${dc.GW}/ipfs/${cid}`, { method: 'GET', redirect: 'follow' });
-  if (!r2.ok) throw new Error(`read via gw ${r2.status}`);
-  return await r2.json();
+  if (!r.ok) return null;
+  const t = await r.text();
+  try { return JSON.parse(t); } catch { return null; }
 }
 
 async function dropletFilesWrite(dc, path, bytes) {
@@ -67,17 +61,9 @@ async function dropletFilesStat(dc, path) {
 }
 
 async function dropletPublishIpns(dc, cid) {
-  let keyName = dc.ipnsKey || 'self';
-  if (keyName && keyName.startsWith('k51')) {
-    try {
-      const list = await fetch(`${dc.API}/key/list`, { method: 'POST', headers: dc.headers });
-      if (list.ok) {
-        const j = await list.json();
-        const hit = (j?.Keys || []).find(k => k?.Id === keyName);
-        if (hit?.Name) keyName = hit.Name;
-      }
-    } catch {}
-  }
+  // Prefer a literal key name; default to 'manifest-key'.
+  const envKey = dc.ipnsKey;
+  const keyName = envKey && !String(envKey).startsWith('k51') ? String(envKey) : 'manifest-key';
   const target = `/ipfs/${cid}`;
   const r = await fetch(`${dc.API}/name/publish?key=${encodeURIComponent(keyName)}&allow-offline=true&arg=${encodeURIComponent(target)}`, { method: 'POST', headers: dc.headers });
   if (!r.ok) throw new Error(`publish ${r.status}: ${await r.text().catch(()=> '')}`);
@@ -122,12 +108,30 @@ exports.main = async function (params) {
 
     const manifestCid = await dropletAddJson(dc, 'manifest.json', manifest);
 
-    // update registry (MFS) and publish IPNS
+    // Update registry (MFS) and publish IPNS
     let registryCid;
     try {
-      let current = await dropletFilesRead(dc, dc.mfsPath).catch(() => null);
-      if (!current || typeof current !== 'object') current = { schema: 'v1', entries: [] };
-      if (!Array.isArray(current.entries)) current.entries = [];
+      // B1: read manifest/registry directly from MFS
+      let current = await dropletFilesRead(dc, dc.mfsPath);
+      // If read failed or not JSON, seed a new object
+      if (!current || typeof current !== 'object') current = { schema: 'v1', updatedAt: '', files: [], entries: [] };
+      // Normalize shape per working curl flow
+      if (Array.isArray(current)) {
+        current = { schema: 'v1', updatedAt: new Date().toISOString(), files: [], entries: current };
+      } else {
+        current.schema = current.schema || 'v1';
+        current.updatedAt = new Date().toISOString();
+        current.files = Array.isArray(current.files) ? current.files : [];
+        if (Array.isArray(current.entries)) {
+          // ok
+        } else if (Array.isArray(current.items)) {
+          current.entries = current.items;
+        } else if (Array.isArray(current.files)) {
+          current.entries = current.files;
+        } else {
+          current.entries = [];
+        }
+      }
 
       const entry = {
         title: manifest.title,
