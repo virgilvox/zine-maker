@@ -101,21 +101,6 @@ exports.main = async function (params) {
           // Continue to fallback paths
           console.error('[registry] MFS read threw', { mfsPath, error: e && e.message ? e.message : String(e) });
         }
-        // Try alternate legacy path automatically if primary fails
-        try {
-          const altPath = mfsPath.includes('/manifest/') ? mfsPath.replace('/manifest/', '/manifests/') : mfsPath.replace('/manifests/', '/manifest/');
-          if (altPath !== mfsPath) {
-            const { signal, cancel } = withTimeout(4000);
-            const body = new URLSearchParams();
-            body.set('arg', altPath);
-            const res = await fetch(`${API}/files/read`, { method: 'POST', headers: { ...headers, 'content-type': 'application/x-www-form-urlencoded' }, body, signal });
-            cancel();
-            if (res.ok) {
-              const txt = await res.text();
-              try { const json = JSON.parse(txt); return { statusCode: 200, headers: TEXT_HEADERS, body: JSON.stringify(json) }; } catch {}
-            }
-          }
-        } catch {}
       }
       // D) Get IPNS id - resolve key name to ID if needed
       let manifestId = undefined;
@@ -123,6 +108,7 @@ exports.main = async function (params) {
       if (ipnsKey && typeof ipnsKey === 'string' && ipnsKey.startsWith('k51')) {
         // Already an IPNS ID
         manifestId = ipnsKey;
+        console.log('[registry] using IPNS ID directly:', manifestId);
       } else if (API && headers) {
         try {
           const list = await fetch(`${API}/key/list`, { method: 'POST', headers });
@@ -131,11 +117,14 @@ exports.main = async function (params) {
             // If it's a key name, find the ID; otherwise look for 'manifest-key'
             const keyName = ipnsKey || 'manifest-key';
             manifestId = (j?.Keys || []).find(k => k?.Name === keyName)?.Id;
+            console.log('[registry] resolved key name to ID:', { keyName, manifestId, availableKeys: (j?.Keys || []).map(k => ({ name: k.Name, id: k.Id })) });
           } else {
             const body = await list.text().catch(() => '');
             console.error('[registry] key/list failed', { status: list.status, body: body?.slice?.(0, 200) });
           }
-        } catch {}
+        } catch (e) {
+          console.error('[registry] key/list error:', e?.message || String(e));
+        }
       }
       if (!manifestId) {
         return { statusCode: 404, headers: TEXT_HEADERS, body: JSON.stringify({ error: 'No manifest IPNS id' }) };

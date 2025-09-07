@@ -75,11 +75,17 @@ async function resolveKeyName(dc, ipnsKey) {
   if (ipnsKey && !String(ipnsKey).startsWith('k51')) return String(ipnsKey); // already a name
   try {
     const r = await fetch(`${dc.API}/key/list`, { method: 'POST', headers: dc.headers });
-    if (!r.ok) return 'manifest-key';
+    if (!r.ok) {
+      console.error('[publish] key/list failed, using manifest-key');
+      return 'manifest-key';
+    }
     const j = await r.json();
     const hit = (j?.Keys || []).find(k => k?.Id === ipnsKey) || (j?.Keys || []).find(k => k?.Name === 'manifest-key');
-    return hit?.Name || 'manifest-key';
-  } catch {
+    const keyName = hit?.Name || 'manifest-key';
+    console.log('[publish] resolved IPNS key:', { ipnsKey, keyName, availableKeys: (j?.Keys || []).map(k => ({ name: k.Name, id: k.Id })) });
+    return keyName;
+  } catch (e) {
+    console.error('[publish] key/list error:', e?.message || String(e));
     return 'manifest-key';
   }
 }
