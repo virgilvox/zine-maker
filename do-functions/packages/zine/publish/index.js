@@ -156,6 +156,7 @@ exports.main = async function (params) {
 
     // Read/normalize registry, upsert entry, write, stat, publish
     let registryCid;
+    let registryError;
     try {
       let current = await dropletFilesRead(dc, dc.mfsPath);
       current = coerceRegistryShape(current);
@@ -183,7 +184,8 @@ exports.main = async function (params) {
       registryCid = await dropletFilesStat(dc, dc.mfsPath);
       await dropletPublishIpns(dc, registryCid);
     } catch (e) {
-      console.error('[publish] registry/ipns failed:', e?.message || String(e));
+      registryError = e?.message || String(e);
+      console.error('[publish] registry/ipns failed:', registryError);
     }
 
     const link = (cid) => cid ? `${dc.GW}/ipfs/${cid}` : undefined;
@@ -193,7 +195,8 @@ exports.main = async function (params) {
       body: {
         projectCid, manifestCid, backupCid,
         links: { project: link(projectCid), manifest: link(manifestCid), backup: link(backupCid) },
-        registryCid, registryPath: dc.mfsPath
+        registryCid, registryPath: dc.mfsPath,
+        registryError: registryError || null
       }
     };
   } catch (e) {
