@@ -22,7 +22,7 @@ function dropletConfig(params) {
   const apiSecret = process.env.IPFS_API_SECRET || params.IPFS_API_SECRET;
   if (!host || !pass || !apiSecret) return null;
   const API = `http://${host}:5002/api/v0`;
-  const GW  = `http://${host}:8080`;
+  const GW = `http://${host}:8080`;
   const auth = 'Basic ' + Buffer.from(`${user}:${pass}`).toString('base64');
   const headers = { Authorization: auth, 'X-API-SECRET': apiSecret };
   return { API, GW, ipnsKey, mfsPath, headers };
@@ -39,21 +39,10 @@ async function dropletAddJson(dc, name, obj) {
 }
 
 async function dropletFilesRead(dc, path) {
-  // Primary: read from MFS
   const r = await fetch(`${dc.API}/files/read?arg=${encodeURIComponent(path)}`, { method: 'POST', headers: dc.headers });
-  if (r.ok) {
-    const t = await r.text();
-    try { return JSON.parse(t); } catch {/* fallthrough to stat+gateway */}
-  }
-  // Fallback: stat -> fetch via gateway (prevents nuking a valid registry on parse issues)
-  try {
-    const hash = await dropletFilesStat(dc, path);
-    const g = await fetch(`${dc.GW}/ipfs/${hash}`, { redirect: 'follow' });
-    if (!g.ok) throw new Error(`gw ${g.status}`);
-    return await g.json();
-  } catch {
-    return null;
-  }
+  if (!r.ok) return null;
+  const t = await r.text();
+  try { return JSON.parse(t); } catch { return null; }
 }
 
 async function dropletFilesWrite(dc, path, bytes) {
@@ -68,50 +57,27 @@ async function dropletFilesStat(dc, path) {
   if (!r.ok) throw new Error(`stat ${r.status}: ${await r.text().catch(()=> '')}`);
   const j = await r.json();
   if (!j || !j.Hash) throw new Error('stat:no-hash');
-  return j.Hash; // Qm...
-}
-
-async function resolveKeyName(dc, ipnsKey) {
-  if (ipnsKey && !String(ipnsKey).startsWith('k51')) return String(ipnsKey); // already a name
-  try {
-    const r = await fetch(`${dc.API}/key/list`, { method: 'POST', headers: dc.headers });
-    if (!r.ok) return 'manifest-key';
-    const j = await r.json();
-    const hit = (j?.Keys || []).find(k => k?.Id === ipnsKey) || (j?.Keys || []).find(k => k?.Name === 'manifest-key');
-    return hit?.Name || 'manifest-key';
-  } catch {
-    return 'manifest-key';
-  }
+  return j.Hash;
 }
 
 async function dropletPublishIpns(dc, cid) {
-  // Publish bare CID; Kubo will map to /ipfs/<cid>
-  const keyName = await resolveKeyName(dc, dc.ipnsKey);
-  const r = await fetch(`${dc.API}/name/publish?key=${encodeURIComponent(keyName)}&allow-offline=true&arg=${encodeURIComponent(cid)}`, { method: 'POST', headers: dc.headers });
+  // Resolve IPFS_IPNS_KEY to the actual key name
+  let keyName = dc.ipnsKey || 'self';
+  if (keyName && keyName.startsWith('k51')) {
+    // If it's an IPNS ID, resolve to the key name
+    try {
+      const list = await fetch(`${dc.API}/key/list`, { method: 'POST', headers: dc.headers });
+      if (list.ok) {
+        const j = await list.json();
+        const hit = (j?.Keys || []).find(k => k?.Id === keyName);
+        if (hit?.Name) keyName = hit.Name;
+      }
+    } catch {}
+  }
+  const target = `/ipfs/${cid}`;
+  const r = await fetch(`${dc.API}/name/publish?key=${encodeURIComponent(keyName)}&allow-offline=true&arg=${encodeURIComponent(target)}`, { method: 'POST', headers: dc.headers });
   if (!r.ok) throw new Error(`publish ${r.status}: ${await r.text().catch(()=> '')}`);
   return r.json();
-}
-
-function coerceRegistryShape(json) {
-  const now = new Date().toISOString();
-  // If it's an array, treat as legacy entries array
-  if (Array.isArray(json)) {
-    return { schema: 'v1', updatedAt: now, files: [], entries: json };
-  }
-  // If it's not an object, start fresh
-  if (!json || typeof json !== 'object') {
-    return { schema: 'v1', updatedAt: now, files: [], entries: [] };
-  }
-  const entries =
-    Array.isArray(json.entries) ? json.entries :
-    Array.isArray(json.items)   ? json.items   :
-    Array.isArray(json.files)   ? json.files   : [];
-  return {
-    schema: json.schema || 'v1',
-    updatedAt: now,
-    files: Array.isArray(json.files) ? json.files : [],
-    entries
-  };
 }
 
 exports.main = async function (params) {
@@ -120,9 +86,7 @@ exports.main = async function (params) {
   }
   try {
     const dc = dropletConfig(params);
-    if (!dc) {
-      return { statusCode: 400, headers: TEXT_HEADERS, body: { error: 'Missing IPFS droplet configuration (host/pass/secret)' } };
-    }
+    if (!dc) return { statusCode: 400, headers: TEXT_HEADERS, body: { error: 'Missing IPFS droplet configuration (host/pass/secret)' } };
 
     const payload = typeof params.__ow_body === 'string'
       ? JSON.parse(Buffer.from(params.__ow_body, 'base64').toString('utf8'))
@@ -154,20 +118,32 @@ exports.main = async function (params) {
 
     const manifestCid = await dropletAddJson(dc, 'manifest.json', manifest);
 
-    // Read/normalize registry, upsert entry, write, stat, publish
+    // Update registry (MFS) and publish IPNS
     let registryCid;
     try {
+      // B1: read manifest/registry directly from MFS
       let current = await dropletFilesRead(dc, dc.mfsPath);
-      current = coerceRegistryShape(current);
-      const entryKey = manifestCid;
-
-      // de-dup by key then append
-      const byKey = new Map();
-      for (const e of current.entries) {
-        const k = e.manifestCid || e.cid || e.id || e.title;
-        if (k && k !== entryKey) byKey.set(k, e);
+      // If read failed or not JSON, seed a new object
+      if (!current || typeof current !== 'object') current = { schema: 'v1', updatedAt: '', files: [], entries: [] };
+      // Normalize shape per working curl flow
+      if (Array.isArray(current)) {
+        current = { schema: 'v1', updatedAt: new Date().toISOString(), files: [], entries: current };
+      } else {
+        current.schema = current.schema || 'v1';
+        current.updatedAt = new Date().toISOString();
+        current.files = Array.isArray(current.files) ? current.files : [];
+        if (Array.isArray(current.entries)) {
+          // ok
+        } else if (Array.isArray(current.items)) {
+          current.entries = current.items;
+        } else if (Array.isArray(current.files)) {
+          current.entries = current.files;
+        } else {
+          current.entries = [];
+        }
       }
-      byKey.set(entryKey, {
+
+      const entry = {
         title: manifest.title,
         name: manifest.title,
         description: manifest.description,
@@ -176,7 +152,14 @@ exports.main = async function (params) {
         projectCid,
         tags: manifest.tags || [],
         createdAt: new Date().toISOString()
-      });
+      };
+
+      const byKey = new Map();
+      for (const e of current.entries) {
+        const k = e.manifestCid || e.cid || e.id || e.title;
+        if (k && k !== manifestCid) byKey.set(k, e);
+      }
+      byKey.set(manifestCid, entry);
       current.entries = Array.from(byKey.values());
 
       await dropletFilesWrite(dc, dc.mfsPath, JSON.stringify(current));
