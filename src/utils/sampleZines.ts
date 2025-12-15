@@ -25,6 +25,10 @@ async function loadProjectFromJSON(idOrFileBase: string): Promise<ZineProject | 
     // Normalize dates
     (project as any).createdAt = new Date((project as any).createdAt);
     (project as any).modifiedAt = new Date((project as any).modifiedAt);
+    // Add formatVersion to samples if missing (they should use new layout)
+    if (!project.formatVersion) {
+      project.formatVersion = 2;
+    }
     return project;
   } catch (err) {
     console.error('Failed to load sample JSON', fileBase, err);

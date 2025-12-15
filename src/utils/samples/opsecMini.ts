@@ -72,7 +72,8 @@ export function buildOpsecMini(): ZineProject {
     pages,
     createdAt: new Date(),
     modifiedAt: new Date(),
-    metadata: { author: 'Sample', description: 'Pocket-size digital safety guide for activists & organizers', tags: ['sample','security','opsec'] }
+    metadata: { author: 'Sample', description: 'Pocket-size digital safety guide for activists & organizers', tags: ['sample','security','opsec'] },
+    formatVersion: 2
   };
 }
 

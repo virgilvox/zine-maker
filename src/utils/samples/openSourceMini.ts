@@ -53,7 +53,8 @@ export function buildOpenSourceMini(): ZineProject {
     pages,
     createdAt: new Date(),
     modifiedAt: new Date(),
-    metadata: { author: 'Sample', description: 'A concise guide to zine culture', tags: ['sample','zines'] }
+    metadata: { author: 'Sample', description: 'A concise guide to zine culture', tags: ['sample','zines'] },
+    formatVersion: 2
   };
 }
 

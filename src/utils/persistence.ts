@@ -50,12 +50,49 @@ export async function loadProject(id: string): Promise<ZineProject | undefined> 
   // Revive dates
   raw.createdAt = new Date(raw.createdAt);
   raw.modifiedAt = new Date(raw.modifiedAt);
+
+  // Add formatVersion if missing (auto-migrate old projects)
+  // AND save the migration back to database
+  if (!raw.formatVersion) {
+    raw.formatVersion = 2;
+    // Save the migrated version back to database
+    const tx = db.transaction(PROJECTS_STORE_NAME, 'readwrite');
+    await tx.store.put(raw);
+    await tx.done;
+  }
+
   return raw as ZineProject;
 }
 
 export async function getAllProjects(): Promise<ZineProject[]> {
   const db = await getDb();
-  return db.getAll(PROJECTS_STORE_NAME);
+  const projects = await db.getAll(PROJECTS_STORE_NAME);
+
+  // Migrate any projects missing formatVersion
+  const projectsToUpdate: any[] = [];
+
+  projects.forEach((p: any) => {
+    // Ensure dates are Date objects
+    p.createdAt = new Date(p.createdAt);
+    p.modifiedAt = new Date(p.modifiedAt);
+
+    // Add formatVersion if missing
+    if (!p.formatVersion) {
+      p.formatVersion = 2;
+      projectsToUpdate.push(p);
+    }
+  });
+
+  // Save any migrated projects back to database
+  if (projectsToUpdate.length > 0) {
+    const tx = db.transaction(PROJECTS_STORE_NAME, 'readwrite');
+    for (const project of projectsToUpdate) {
+      await tx.store.put(project);
+    }
+    await tx.done;
+  }
+
+  return projects;
 }
 
 export async function deleteProject(id: string): Promise<void> {

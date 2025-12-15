@@ -72,7 +72,8 @@ export function buildIceKyrMini(): ZineProject {
     pages,
     createdAt: new Date(),
     modifiedAt: new Date(),
-    metadata: { author: 'Sample', description: 'Pocket KYR guide for ICE encounters', tags: ['sample','immigration','kyr','ice'] }
+    metadata: { author: 'Sample', description: 'Pocket KYR guide for ICE encounters', tags: ['sample','immigration','kyr','ice'] },
+    formatVersion: 2
   };
 }
 

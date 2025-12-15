@@ -128,7 +128,8 @@ export const useProjectStore = defineStore('project', () => {
         author: '',
         description: '',
         tags: []
-      }
+      },
+      formatVersion: 2 // New projects use corrected cover layout
     };
 
     currentPageIndex.value = 0;
@@ -142,6 +143,9 @@ export const useProjectStore = defineStore('project', () => {
     // Ensure dates are correctly revived from JSON serialization
     project.createdAt = new Date(project.createdAt);
     project.modifiedAt = new Date(project.modifiedAt);
+
+    // The migration now happens in persistence.ts when loading
+    // This ensures it's saved immediately to database
     currentProject.value = project;
     currentPageIndex.value = 0;
     selectedContentIds.value = [];

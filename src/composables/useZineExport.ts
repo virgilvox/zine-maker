@@ -17,10 +17,26 @@ export async function exportZineForTemplate(
   getAsset: GetAssetFn,
   options: ExportOptions = {}
 ): Promise<{ images: string[]; pdfData: string; width: number; height: number }> {
-  const template = project.template as ZineTemplate;
+  // Get the current template from the store to ensure we have the latest page positions
+  // Projects save a copy of the template, which might have outdated positions
+  const { useTemplatesStore } = await import('@/stores/templates');
+  const templatesStore = useTemplatesStore();
+  const currentTemplate = templatesStore.getTemplate(project.template.id);
+  const template = currentTemplate || project.template as ZineTemplate;
+
   const width = template.printLayout.sheetWidth;
   const height = template.printLayout.sheetHeight;
   const pixelRatio = options.pixelRatio ?? 2;
+
+  // Use the current template's page positions (which have the corrected layout)
+  let pagePositions = template.printLayout.pagePositions;
+
+  // Debug: log what positions we're using
+  if (template.format === 'quarter-fold') {
+    console.log('Quarter-fold export positions:', pagePositions.map(p => p.pageNumber));
+    console.log('Project formatVersion:', project.formatVersion);
+    console.log('Using template from:', currentTemplate ? 'store' : 'project');
+  }
 
   const tempContainer = document.createElement('div');
   tempContainer.style.position = 'absolute';
@@ -170,7 +186,7 @@ export async function exportZineForTemplate(
       images.push(front, back);
     } else if (template.format === 'quarter-fold') {
       // Single sheet, single side (slit zine is one-sided)
-      const front = await renderSide('front', template.printLayout.pagePositions);
+      const front = await renderSide('front', pagePositions);
       images.push(front);
     } else if (template.format === 'accordion') {
       // Single-sided 16-page accordion (slit-and-fold): render one image

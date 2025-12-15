@@ -18,16 +18,18 @@ export const useTemplatesStore = defineStore('templates', () => {
         sheetWidth: 792,
         sheetHeight: 612,
         pagePositions: [
-          // Top row (upside down): 4, 3, 2, 1
+          // Top row (upside down): pages 4, 3, 2, 7
           { pageNumber: 4, x: 0,       y: 0,        width: 792/4, height: 612/2, rotation: 180, isFlipped: false, side: 'front' },
           { pageNumber: 3, x: 792/4,  y: 0,        width: 792/4, height: 612/2, rotation: 180, isFlipped: false, side: 'front' },
           { pageNumber: 2, x: 792/2,  y: 0,        width: 792/4, height: 612/2, rotation: 180, isFlipped: false, side: 'front' },
-          { pageNumber: 1, x: 792*3/4,y: 0,        width: 792/4, height: 612/2, rotation: 180, isFlipped: false, side: 'front' },
-          // Bottom row (right side up): 5, 6, 7, 8
+          { pageNumber: 7, x: 792*3/4,y: 0,        width: 792/4, height: 612/2, rotation: 180, isFlipped: false, side: 'front' },
+          // Bottom row (right side up): pages 5, 6, 8 (back cover), 1 (front cover)
+          // In editor: page 1 = front cover, page 8 = back cover
+          // In print layout: they need to be adjacent in bottom row for proper folding
           { pageNumber: 5, x: 0,       y: 612/2,   width: 792/4, height: 612/2, rotation: 0, isFlipped: false, side: 'front' },
           { pageNumber: 6, x: 792/4,  y: 612/2,   width: 792/4, height: 612/2, rotation: 0, isFlipped: false, side: 'front' },
-          { pageNumber: 7, x: 792/2,  y: 612/2,   width: 792/4, height: 612/2, rotation: 0, isFlipped: false, side: 'front' },
-          { pageNumber: 8, x: 792*3/4,y: 612/2,   width: 792/4, height: 612/2, rotation: 0, isFlipped: false, side: 'front' }
+          { pageNumber: 8, x: 792/2,  y: 612/2,   width: 792/4, height: 612/2, rotation: 0, isFlipped: false, side: 'front' },
+          { pageNumber: 1, x: 792*3/4,y: 612/2,   width: 792/4, height: 612/2, rotation: 0, isFlipped: false, side: 'front' }
         ]
       },
       pageCanvas: { width: 792/4, height: 612/2 }

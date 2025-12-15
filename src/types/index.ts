@@ -120,6 +120,7 @@ export interface ZineProject {
     description: string;
     tags: string[];
   };
+  formatVersion?: number; // 2 = new cover layout, undefined/1 = legacy
 }
 
 export interface ExportOptions {
