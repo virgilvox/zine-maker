@@ -285,6 +285,9 @@ watch(() => projectStore.currentPage?.content, async (content) => {
           fontStyle: `${p.fontStyle} ${p.fontWeight}`.trim(),
           fill: p.color,
           align: p.textAlign,
+          lineHeight: p.lineHeight,
+          textDecoration: p.textDecoration !== 'none' ? p.textDecoration : '',
+          padding: p.padding,
           visible: isVisible,
           draggable: toolsStore.activeTool === 'select' && isSelected && !isLocked,
           listening: !isLocked

@@ -247,7 +247,7 @@ export async function createKonvaNode(content: ZineContent, getAsset: GetAssetFn
 
   if (content.type === 'text') {
     const p = content.properties as TextProperties;
-    return new Konva.Text({ ...common, text: p.text, fontSize: p.fontSize, fontFamily: p.fontFamily, fontStyle: `${p.fontStyle} ${p.fontWeight}`.trim(), fill: p.color, align: p.textAlign });
+    return new Konva.Text({ ...common, text: p.text, fontSize: p.fontSize, fontFamily: p.fontFamily, fontStyle: `${p.fontStyle} ${p.fontWeight}`.trim(), fill: p.color, align: p.textAlign, lineHeight: p.lineHeight, textDecoration: p.textDecoration !== 'none' ? p.textDecoration : '', padding: p.padding });
   }
 
   if (content.type === 'image') {
