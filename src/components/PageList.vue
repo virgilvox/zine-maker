@@ -9,7 +9,7 @@
       </button>
     </div>
 
-    <div class="pages-grid">
+    <div class="pages-grid" ref="pagesGridRef">
       <div 
         v-for="(page, index) in projectStore.currentProject?.pages" 
         :key="page.id"
@@ -45,7 +45,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, computed } from 'vue';
+import { useSortable } from '@vueuse/integrations/useSortable';
 import { useProjectStore } from '@/stores/project';
 import { useUIStore } from '@/stores/ui';
 import { useAssetStore } from '@/stores/assetStore';
@@ -58,6 +59,24 @@ const assetStore = useAssetStore();
 
 const editingId = ref<string | null>(null);
 const editValue = ref('');
+
+const pagesGridRef = ref<HTMLElement | null>(null);
+const pageIds = computed(() => projectStore.currentProject?.pages.map(p => p.id) ?? []);
+
+useSortable(pagesGridRef, pageIds, {
+  animation: 150,
+  ghostClass: 'sortable-ghost',
+  chosenClass: 'sortable-chosen',
+  dragClass: 'sortable-drag',
+  filter: '.title-input',
+  preventOnFilter: false,
+  onEnd(evt) {
+    const { oldIndex, newIndex } = evt;
+    if (oldIndex != null && newIndex != null && oldIndex !== newIndex) {
+      projectStore.reorderPages(oldIndex, newIndex);
+    }
+  },
+});
 
 function pageTitle(page: any): string {
   const tpl = projectStore.currentProject?.template;
@@ -184,8 +203,28 @@ async function exportZine(): Promise<void> {
   padding: 0.5rem;
   border: 2px solid transparent;
   border-radius: 6px;
-  cursor: pointer;
+  cursor: grab;
   transition: all 0.2s ease;
+}
+
+.page-item:active {
+  cursor: grabbing;
+}
+
+.page-item.sortable-ghost {
+  opacity: 0.3;
+  border-color: #000;
+  border-style: dashed;
+}
+
+.page-item.sortable-chosen {
+  box-shadow: 3px 3px 0 #000;
+  border-color: #000;
+  background: #e7ffe7;
+}
+
+.page-item.sortable-drag {
+  opacity: 0.9;
 }
 
 .page-item:hover {

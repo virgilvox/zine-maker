@@ -547,6 +547,52 @@ export const useProjectStore = defineStore('project', () => {
     return 'export-data';
   }
 
+  function reorderPages(fromIndex: number, toIndex: number): void {
+    if (!currentProject.value) return;
+    const pages = currentProject.value.pages;
+    if (fromIndex === toIndex || fromIndex < 0 || toIndex < 0 || fromIndex >= pages.length || toIndex >= pages.length) return;
+
+    const prevPages = JSON.parse(JSON.stringify(pages)) as ZinePage[];
+    const prevPageIndex = currentPageIndex.value;
+
+    const [moved] = pages.splice(fromIndex, 1);
+    pages.splice(toIndex, 0, moved);
+    pages.forEach((p, i) => { p.pageNumber = i + 1; });
+
+    // Follow the currently-viewed page
+    if (currentPageIndex.value === fromIndex) {
+      currentPageIndex.value = toIndex;
+    } else if (fromIndex < currentPageIndex.value && toIndex >= currentPageIndex.value) {
+      currentPageIndex.value--;
+    } else if (fromIndex > currentPageIndex.value && toIndex <= currentPageIndex.value) {
+      currentPageIndex.value++;
+    }
+
+    isModified.value = true;
+
+    const newPageIndex = currentPageIndex.value;
+    pushHistory({
+      name: 'reorderPages',
+      undo: () => {
+        if (!currentProject.value) return;
+        currentProject.value.pages = prevPages.map(p => {
+          const existing = currentProject.value!.pages.find(ep => ep.id === p.id);
+          return existing ? Object.assign(existing, p) : p;
+        });
+        currentProject.value.pages = JSON.parse(JSON.stringify(prevPages));
+        currentPageIndex.value = prevPageIndex;
+      },
+      redo: () => {
+        if (!currentProject.value) return;
+        const pages = currentProject.value.pages;
+        const [moved] = pages.splice(fromIndex, 1);
+        pages.splice(toIndex, 0, moved);
+        pages.forEach((p, i) => { p.pageNumber = i + 1; });
+        currentPageIndex.value = newPageIndex;
+      }
+    });
+  }
+
   function renamePage(pageId: string, newTitle: string): void {
     if (!currentProject.value) return;
     const page = currentProject.value.pages.find(p => p.id === pageId);
@@ -589,8 +635,8 @@ export const useProjectStore = defineStore('project', () => {
     manualSave,
     getContentById,
     duplicateContent,
-    exportProject
-    ,
+    exportProject,
+    reorderPages,
     renamePage
   };
 });
