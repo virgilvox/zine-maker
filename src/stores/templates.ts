@@ -58,7 +58,7 @@ export const useTemplatesStore = defineStore('templates', () => {
     // removed outdated 'booklet-letter' per request
     {
       id: 'accordion-16-letter',
-      name: 'Accordion 16 (Letter)',
+      name: 'Accordion 16 Snake (Letter)',
       format: 'accordion',
       pageSize: 'letter',
       orientation: 'landscape',
@@ -90,6 +90,45 @@ export const useTemplatesStore = defineStore('templates', () => {
           { pageNumber: 14, x: 153, y: 594, width: 153, height: 198, rotation: 0, isFlipped: false, side: 'front' },
           { pageNumber: 15, x: 306, y: 594, width: 153, height: 198, rotation: 0, isFlipped: false, side: 'front' },
           { pageNumber: 16, x: 459, y: 594, width: 153, height: 198, rotation: 0, isFlipped: false, side: 'front' }
+        ]
+      },
+      pageCanvas: { width: 153, height: 198 }
+    }
+    ,
+    {
+      id: 'accordion-16-letter-alt',
+      name: 'Accordion 16 Window (Letter)',
+      format: 'accordion',
+      pageSize: 'letter',
+      orientation: 'landscape',
+      pageCount: 16,
+      description: '16-page one-sheet accordion (single-sided) with fold-corrected layout. Pages 1–16 map to the actual physical reading order after cutting and accordion folding.',
+      foldInstructions: 'Print single-sided. Cut along the three horizontal lines, then accordion fold. This layout accounts for strip interleaving—strips 2 and 3 swap their right halves during folding.',
+      printLayout: {
+        sheetWidth: 612,
+        sheetHeight: 792,
+        pagePositions: [
+          // 4x4 grid, portrait tiles 153×198. Fold-corrected page assignments.
+          // Row 1 (y=0, rotated 180)
+          { pageNumber: 4,  x:   0, y:   0, width: 153, height: 198, rotation: 180, isFlipped: false, side: 'front' },
+          { pageNumber: 3,  x: 153, y:   0, width: 153, height: 198, rotation: 180, isFlipped: false, side: 'front' },
+          { pageNumber: 2,  x: 306, y:   0, width: 153, height: 198, rotation: 180, isFlipped: false, side: 'front' },
+          { pageNumber: 1,  x: 459, y:   0, width: 153, height: 198, rotation: 180, isFlipped: false, side: 'front' },
+          // Row 2 (y=198)
+          { pageNumber: 5,  x:   0, y: 198, width: 153, height: 198, rotation: 0, isFlipped: false, side: 'front' },
+          { pageNumber: 6,  x: 153, y: 198, width: 153, height: 198, rotation: 0, isFlipped: false, side: 'front' },
+          { pageNumber: 15, x: 306, y: 198, width: 153, height: 198, rotation: 0, isFlipped: false, side: 'front' },
+          { pageNumber: 16, x: 459, y: 198, width: 153, height: 198, rotation: 0, isFlipped: false, side: 'front' },
+          // Row 3 (y=396, rotated 180)
+          { pageNumber: 8,  x:   0, y: 396, width: 153, height: 198, rotation: 180, isFlipped: false, side: 'front' },
+          { pageNumber: 7,  x: 153, y: 396, width: 153, height: 198, rotation: 180, isFlipped: false, side: 'front' },
+          { pageNumber: 14, x: 306, y: 396, width: 153, height: 198, rotation: 180, isFlipped: false, side: 'front' },
+          { pageNumber: 13, x: 459, y: 396, width: 153, height: 198, rotation: 180, isFlipped: false, side: 'front' },
+          // Row 4 (y=594)
+          { pageNumber: 9,  x:   0, y: 594, width: 153, height: 198, rotation: 0, isFlipped: false, side: 'front' },
+          { pageNumber: 10, x: 153, y: 594, width: 153, height: 198, rotation: 0, isFlipped: false, side: 'front' },
+          { pageNumber: 11, x: 306, y: 594, width: 153, height: 198, rotation: 0, isFlipped: false, side: 'front' },
+          { pageNumber: 12, x: 459, y: 594, width: 153, height: 198, rotation: 0, isFlipped: false, side: 'front' }
         ]
       },
       pageCanvas: { width: 153, height: 198 }
