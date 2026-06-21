@@ -65,7 +65,7 @@
       <div class="print-instructions">
         <h4>Printing Instructions:</h4>
         <ul>
-          <li>Print at 100% scale (no scaling). Use standard letter-size paper (8.5" × 11")</li>
+          <li>Print at 100% scale (no scaling). Use standard size paper (letter: 8.5" × 11", A4: 210mm × 297mm)</li>
           <li>For quarter-fold: Fold in half horizontally, then vertically. For half-fold: Fold in half along the center line.</li>
           <li>Cut along fold lines if needed to separate pages</li>
         </ul>
