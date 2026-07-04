@@ -246,17 +246,17 @@ export const useTemplatesStore = defineStore('templates', () => {
           { pageNumber: 5,  x:   0, y: 842/4, width: 595/4, height: 842/4, rotation: 0, isFlipped: false, side: 'front' },
           { pageNumber: 6,  x: 595/4, y: 842/4, width: 595/4, height: 842/4, rotation: 0, isFlipped: false, side: 'front' },
           { pageNumber: 15, x: 595/2, y: 842/4, width: 595/4, height: 842/4, rotation: 0, isFlipped: false, side: 'front' },
-          { pageNumber: 16, x: 459, y: 842/4, width: 595/4, height: 842/4, rotation: 0, isFlipped: false, side: 'front' },
+          { pageNumber: 16, x: 595/4*3, y: 842/4, width: 595/4, height: 842/4, rotation: 0, isFlipped: false, side: 'front' },
           // Row 3 (y=842/2, rotated 180)
           { pageNumber: 8,  x:   0, y: 842/2, width: 595/4, height: 842/4, rotation: 180, isFlipped: false, side: 'front' },
           { pageNumber: 7,  x: 595/4, y: 842/2, width: 595/4, height: 842/4, rotation: 180, isFlipped: false, side: 'front' },
           { pageNumber: 14, x: 595/2, y: 842/2, width: 595/4, height: 842/4, rotation: 180, isFlipped: false, side: 'front' },
           { pageNumber: 13, x: 595/4*3, y: 842/2, width: 595/4, height: 842/4, rotation: 180, isFlipped: false, side: 'front' },
           // Row 4 (y=842/4*3)
-          { pageNumber: 9,  x:   0, y: 842/4, width: 595/4, height: 842/4, rotation: 0, isFlipped: false, side: 'front' },
-          { pageNumber: 10, x: 595/4, y: 842/4, width: 595/4, height: 842/4, rotation: 0, isFlipped: false, side: 'front' },
-          { pageNumber: 11, x: 595/2, y: 842/4, width: 595/4, height: 842/4, rotation: 0, isFlipped: false, side: 'front' },
-          { pageNumber: 12, x: 595/4*3, y: 842/4, width: 595/4, height: 842/4, rotation: 0, isFlipped: false, side: 'front' }
+          { pageNumber: 9,  x:   0, y: 842/4*3, width: 595/4, height: 842/4, rotation: 0, isFlipped: false, side: 'front' },
+          { pageNumber: 10, x: 595/4, y: 842/4*3, width: 595/4, height: 842/4, rotation: 0, isFlipped: false, side: 'front' },
+          { pageNumber: 11, x: 595/2, y: 842/4*3, width: 595/4, height: 842/4, rotation: 0, isFlipped: false, side: 'front' },
+          { pageNumber: 12, x: 595/4*3, y: 842/4*3, width: 595/4, height: 842/4, rotation: 0, isFlipped: false, side: 'front' }
         ]
       },
       pageCanvas: { width: 595/4, height: 842/4 }

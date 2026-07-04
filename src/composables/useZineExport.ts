@@ -65,10 +65,16 @@ export async function exportZineForTemplate(
         }
 
         const sorted = [...page.content].sort((a, b) => (a.zIndex ?? 0) - (b.zIndex ?? 0));
-        for (const content of sorted) {
-          const promise = createKonvaNode(content, getAsset).then(node => { if (node) group.add(node as Konva.Shape); });
-          nodePromises.push(promise);
-        }
+        // Create all nodes in parallel, but add them to the group in zIndex order
+        // once they resolve. Adding inside each node's own .then() would order nodes
+        // by resolution time — images resolve late (they await onload) and would
+        // always end up on top, ignoring their zIndex. Await all, then append in order.
+        const pagePromise = Promise.all(
+          sorted.map(content => createKonvaNode(content, getAsset).catch(() => null))
+        ).then(nodes => {
+          for (const node of nodes) { if (node) group.add(node as Konva.Shape); }
+        });
+        nodePromises.push(pagePromise);
 
         if (pagePos.rotation !== 0) {
           group.rotation(pagePos.rotation);
