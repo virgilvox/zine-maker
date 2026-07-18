@@ -126,6 +126,10 @@
               :config="{ x: selectionRect.x, y: selectionRect.y, width: selectionRect.width, height: selectionRect.height, stroke: '#2563eb', dash: [4,4], listening: false }"
             />
 
+            <!-- Center snap guides -->
+            <v-line v-if="guides.v" :config="centerGuideVConfig" />
+            <v-line v-if="guides.h" :config="centerGuideHConfig" />
+
             <!-- Konva Transformer -->
             <v-transformer
               v-if="hasSelection"
@@ -494,16 +498,31 @@ function onNodeDragMove(_id: string, e: any) {
   const stage = stageRef.value?.getNode?.();
   const tr = transformerRef.value?.getNode?.();
   if (!stage || !tr) return;
-  const selected = tr.nodes().filter((n: Konva.Node) => n.id() !== node.id());
-  selected.forEach((n: Konva.Node) => {
+  const otherSelected = tr.nodes().filter((n: Konva.Node) => n.id() !== node.id());
+
+  otherSelected.forEach((n: Konva.Node) => {
     const p = n.position();
     n.position({ x: p.x + deltaX, y: p.y + deltaY });
   });
+
+  // Snap the dragged node to center guides, then propagate the snap offset
+  // to the rest of the selection so the whole group stays aligned
+  const snapDelta = snapNodeToCenter(node);
+  if (snapDelta.x !== 0 || snapDelta.y !== 0) {
+    otherSelected.forEach((n: Konva.Node) => {
+      const p = n.position();
+      n.position({ x: p.x + snapDelta.x, y: p.y + snapDelta.y });
+    });
+    (node as any)._prevPos = node.position();
+  }
+
   const layer = contentLayerRef.value?.getNode?.();
   layer?.batchDraw();
 }
 
 function onDragEnd(id: string, e: any) {
+  guides.value = { v: false, h: false };
+
   const node = e.target as Konva.Node;
   // Clear per-node temp state
   (node as any)._prevPos = undefined;
@@ -570,17 +589,24 @@ function onOverlayMouseMove(e: any) {
   const tr = transformerRef.value?.getNode?.();
   const nodes = tr ? (tr.nodes() as Konva.Node[]) : [];
   if (overlayRaf !== null) { if (e?.evt) e.evt.stopPropagation(); return; }
+
   overlayRaf = requestAnimationFrame(() => {
+    // Apply raw motion from base positions
     nodes.forEach((n) => {
       const base = groupInitialPos[n.id()];
       if (base) n.position({ x: base.x + dx, y: base.y + dy });
     });
+
+    // Snap the group to center guides, if close enough
+    snapGroupToCenter(nodes, layer);
+
     layer.batchDraw();
     overlayRaf = null;
   });
   if (e?.evt) e.evt.stopPropagation();
 }
 function onOverlayMouseUp(e: any) {
+  guides.value = { v: false, h: false };
   if (!hasSelection.value) { overlayDragStart = null; return; }
   const stage = stageRef.value?.getNode?.();
   if (!stage) { overlayDragStart = null; return; }
@@ -767,6 +793,97 @@ const transformerConfig = {
 const isSelecting = ref(false);
 const selectionStart = ref({ x: 0, y: 0 });
 const selectionRect = ref({ x: 0, y: 0, width: 0, height: 0 });
+
+const SNAP_THRESHOLD_PX = 8; // in screen pixels, converted to stage units below
+const guides = ref<{ v: boolean; h: boolean }>({ v: false, h: false });
+
+// Computes the guide-line geometry from the current page background
+const centerGuideVConfig = computed(() => {
+  const bg = pageBackgroundConfig.value;
+  const x = bg.x + bg.width / 2;
+  return { points: [x, bg.y, x, bg.y + bg.height], stroke: '#ff4d6d', strokeWidth: 1, dash: [4, 4], listening: false };
+});
+const centerGuideHConfig = computed(() => {
+  const bg = pageBackgroundConfig.value;
+  const y = bg.y + bg.height / 2;
+  return { points: [bg.x, y, bg.x + bg.width, y], stroke: '#ff4d6d', strokeWidth: 1, dash: [4, 4], listening: false };
+});
+
+// Snaps a single node's center to the page's center guides if within threshold.
+// Returns the (dx, dy) offset actually applied, so callers can propagate it to
+// other nodes being dragged together.
+function snapNodeToCenter(node: Konva.Node): { x: number; y: number } {
+  const stage = stageRef.value?.getNode?.() as Konva.Stage;
+  const layer = contentLayerRef.value?.getNode?.();
+  if (!stage || !layer) {
+    guides.value = { v: false, h: false };
+    return { x: 0, y: 0 };
+  }
+
+  const bg = pageBackgroundConfig.value;
+  const scale = stage.scaleX() || 1;
+  const threshold = SNAP_THRESHOLD_PX / scale;
+
+  const rect = node.getClientRect({ skipShadow: true, skipStroke: true, relativeTo: layer as any });
+  const nodeCenterX = rect.x + rect.width / 2;
+  const nodeCenterY = rect.y + rect.height / 2;
+  const pageCenterX = bg.x + bg.width / 2;
+  const pageCenterY = bg.y + bg.height / 2;
+
+  const snapV = Math.abs(nodeCenterX - pageCenterX) < threshold;
+  const snapH = Math.abs(nodeCenterY - pageCenterY) < threshold;
+
+  let dx = 0, dy = 0;
+  if (snapV) { dx = pageCenterX - nodeCenterX; node.x(node.x() + dx); }
+  if (snapH) { dy = pageCenterY - nodeCenterY; node.y(node.y() + dy); }
+
+  guides.value = { v: snapV, h: snapH };
+  return { x: dx, y: dy };
+}
+
+// Computes the collective bounding box of a group of nodes, checks if its
+// center is within snap threshold of the page center, and if so nudges all
+// nodes by the snap offset. Updates `guides` for the dashed line UI.
+// Returns the (dx, dy) offset that was applied (zero if no snap occurred).
+function snapGroupToCenter(nodes: Konva.Node[], layer: Konva.Layer): { x: number; y: number } {
+  const stage = stageRef.value?.getNode?.() as Konva.Stage;
+  if (!stage || nodes.length === 0) {
+    guides.value = { v: false, h: false };
+    return { x: 0, y: 0 };
+  }
+
+  const bg = pageBackgroundConfig.value;
+  const scale = stage.scaleX() || 1;
+  const threshold = SNAP_THRESHOLD_PX / scale;
+
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  nodes.forEach((n) => {
+    const r = (n as any).getClientRect({ skipShadow: true, skipStroke: true, relativeTo: layer });
+    minX = Math.min(minX, r.x); minY = Math.min(minY, r.y);
+    maxX = Math.max(maxX, r.x + r.width); maxY = Math.max(maxY, r.y + r.height);
+  });
+  const groupCenterX = (minX + maxX) / 2;
+  const groupCenterY = (minY + maxY) / 2;
+  const pageCenterX = bg.x + bg.width / 2;
+  const pageCenterY = bg.y + bg.height / 2;
+
+  const snapV = Math.abs(groupCenterX - pageCenterX) < threshold;
+  const snapH = Math.abs(groupCenterY - pageCenterY) < threshold;
+
+  let dx = 0, dy = 0;
+  if (snapV) dx = pageCenterX - groupCenterX;
+  if (snapH) dy = pageCenterY - groupCenterY;
+
+  if (dx !== 0 || dy !== 0) {
+    nodes.forEach((n) => {
+      const pos = n.position();
+      n.position({ x: pos.x + dx, y: pos.y + dy });
+    });
+  }
+  guides.value = { v: snapV, h: snapH };
+
+  return { x: dx, y: dy };
+}
 
 function toStagePoint(stage: Konva.Stage, p: {x:number; y:number}) {
   const scale = stage.scaleX();
