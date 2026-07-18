@@ -126,6 +126,9 @@
               :config="{ x: selectionRect.x, y: selectionRect.y, width: selectionRect.width, height: selectionRect.height, stroke: '#2563eb', dash: [4,4], listening: false }"
             />
 
+            <!-- Page boundary warning: drawn above content when something overflows -->
+            <v-rect v-if="hasOutOfBoundsContent" :config="pageBoundaryHighlightConfig" />
+
             <!-- Center snap guides -->
             <v-line v-if="guides.v" :config="centerGuideVConfig" />
             <v-line v-if="guides.h" :config="centerGuideHConfig" />
