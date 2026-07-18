@@ -271,12 +271,15 @@ async function addImageToCanvas(assetId: number) {
   if (!file) return;
 
   const src = URL.createObjectURL(file);
+
+  const { width, height } = await getImageDimensions(src);
+
   const imageContent = {
     type: 'image' as const,
     x: 50,
     y: 50,
-    width: 200,
-    height: 150,
+    width,
+    height,
     rotation: 0,
     zIndex: Date.now(),
     properties: {
@@ -288,6 +291,28 @@ async function addImageToCanvas(assetId: number) {
   };
   projectStore.addContentToCurrentPage(imageContent);
   toolsStore.setActiveTool('select');
+}
+
+function getImageDimensions(src: string): Promise<{ width: number; height: number }> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      resolve(scaleToFit(img.naturalWidth, img.naturalHeight));
+    };
+    img.onerror = reject;
+    img.src = src;
+  });
+}
+
+function scaleToFit(width: number, height: number, maxDimension = 300): { width: number; height: number } {
+  if (width <= maxDimension && height <= maxDimension) {
+    return { width, height };
+  }
+  const scale = Math.min(maxDimension / width, maxDimension / height);
+  return {
+    width: Math.round(width * scale),
+    height: Math.round(height * scale)
+  };
 }
 </script>
 
