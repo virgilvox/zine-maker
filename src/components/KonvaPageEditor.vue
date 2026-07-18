@@ -126,6 +126,13 @@
               :config="{ x: selectionRect.x, y: selectionRect.y, width: selectionRect.width, height: selectionRect.height, stroke: '#2563eb', dash: [4,4], listening: false }"
             />
 
+            <!-- Page boundary warning: drawn above content when something overflows -->
+            <v-rect v-if="hasOutOfBoundsContent" :config="pageBoundaryHighlightConfig" />
+
+            <!-- Center snap guides -->
+            <v-line v-if="guides.v" :config="centerGuideVConfig" />
+            <v-line v-if="guides.h" :config="centerGuideHConfig" />
+
             <!-- Konva Transformer -->
             <v-transformer
               v-if="hasSelection"
@@ -225,6 +232,21 @@ const pageBackgroundConfig = computed(() => {
   };
 });
 
+// A second border drawn on top of content when something overflows the page,
+// so the boundary stays visible even when content is layered above it.
+const pageBoundaryHighlightConfig = computed(() => {
+  const bg = pageBackgroundConfig.value;
+  return {
+    x: bg.x,
+    y: bg.y,
+    width: bg.width,
+    height: bg.height,
+    fill: 'transparent',
+    stroke: '#ef4444',
+    strokeWidth: 3,
+    listening: false
+  };
+});
 
 // Build Konva configs from current page content
 const pageNodes = shallowRef<any[]>([]);
@@ -416,7 +438,10 @@ function attachTransformer() {
 }
 
 watch(selectedIds, () => attachTransformer(), { immediate: true });
-watch(pageNodes, () => attachTransformer());
+watch(pageNodes, () => {
+  attachTransformer();
+  nextTick(() => updateOutOfBoundsWarnings());
+});
 
 function selectNode(id: string, e?: any) {
   if (toolsStore.activeTool !== 'select') return;
@@ -501,6 +526,7 @@ function onNodeDragMove(_id: string, e: any) {
   });
   const layer = contentLayerRef.value?.getNode?.();
   layer?.batchDraw();
+  updateOutOfBoundsWarnings();
 }
 
 function onDragEnd(id: string, e: any) {
@@ -539,6 +565,7 @@ function onDragEnd(id: string, e: any) {
     node.draggable((node as any)._wasDraggable);
     (node as any)._wasDraggable = undefined;
   }
+  updateOutOfBoundsWarnings();
 }
 
 // Overlay drag to move selection when clicking inside selection bounds (not on a node)
@@ -576,6 +603,7 @@ function onOverlayMouseMove(e: any) {
       if (base) n.position({ x: base.x + dx, y: base.y + dy });
     });
     layer.batchDraw();
+    updateOutOfBoundsWarnings();
     overlayRaf = null;
   });
   if (e?.evt) e.evt.stopPropagation();
@@ -609,6 +637,7 @@ function onOverlayMouseUp(e: any) {
   groupInitialPos = {};
   if (overlayRaf) { cancelAnimationFrame(overlayRaf); overlayRaf = null; }
   if (e?.evt) e.evt.stopPropagation();
+  updateOutOfBoundsWarnings();
 }
 
 function onWheel(e: any) {
@@ -724,6 +753,7 @@ onMounted(() => {
       projectStore.updateContent(id, { x: pos.x - pageBackgroundConfig.value.x, y: pos.y - pageBackgroundConfig.value.y, width, height, rotation });
     });
     layer.batchDraw();
+    updateOutOfBoundsWarnings();
   });
   try { layer.perfectDrawEnabled(false); } catch {}
 });
@@ -767,6 +797,132 @@ const transformerConfig = {
 const isSelecting = ref(false);
 const selectionStart = ref({ x: 0, y: 0 });
 const selectionRect = ref({ x: 0, y: 0, width: 0, height: 0 });
+
+const SNAP_THRESHOLD_PX = 8; // in screen pixels, converted to stage units below
+const guides = ref<{ v: boolean; h: boolean }>({ v: false, h: false });
+
+// Computes the guide-line geometry from the current page background
+const centerGuideVConfig = computed(() => {
+  const bg = pageBackgroundConfig.value;
+  const x = bg.x + bg.width / 2;
+  return { points: [x, bg.y, x, bg.y + bg.height], stroke: '#ff4d6d', strokeWidth: 1, dash: [4, 4], listening: false };
+});
+const centerGuideHConfig = computed(() => {
+  const bg = pageBackgroundConfig.value;
+  const y = bg.y + bg.height / 2;
+  return { points: [bg.x, y, bg.x + bg.width, y], stroke: '#ff4d6d', strokeWidth: 1, dash: [4, 4], listening: false };
+});
+
+// Snaps a single node's center to the page's center guides if within threshold.
+// Returns the (dx, dy) offset actually applied, so callers can propagate it to
+// other nodes being dragged together.
+function snapNodeToCenter(node: Konva.Node): { x: number; y: number } {
+  const stage = stageRef.value?.getNode?.() as Konva.Stage;
+  const layer = contentLayerRef.value?.getNode?.();
+  if (!stage || !layer) {
+    guides.value = { v: false, h: false };
+    return { x: 0, y: 0 };
+  }
+
+  const bg = pageBackgroundConfig.value;
+  const scale = stage.scaleX() || 1;
+  const threshold = SNAP_THRESHOLD_PX / scale;
+
+  const rect = node.getClientRect({ skipShadow: true, skipStroke: true, relativeTo: layer as any });
+  const nodeCenterX = rect.x + rect.width / 2;
+  const nodeCenterY = rect.y + rect.height / 2;
+  const pageCenterX = bg.x + bg.width / 2;
+  const pageCenterY = bg.y + bg.height / 2;
+
+  const snapV = Math.abs(nodeCenterX - pageCenterX) < threshold;
+  const snapH = Math.abs(nodeCenterY - pageCenterY) < threshold;
+
+  let dx = 0, dy = 0;
+  if (snapV) { dx = pageCenterX - nodeCenterX; node.x(node.x() + dx); }
+  if (snapH) { dy = pageCenterY - nodeCenterY; node.y(node.y() + dy); }
+
+  guides.value = { v: snapV, h: snapH };
+  return { x: dx, y: dy };
+}
+
+// Computes the collective bounding box of a group of nodes, checks if its
+// center is within snap threshold of the page center, and if so nudges all
+// nodes by the snap offset. Updates `guides` for the dashed line UI.
+// Returns the (dx, dy) offset that was applied (zero if no snap occurred).
+function snapGroupToCenter(nodes: Konva.Node[], layer: Konva.Layer): { x: number; y: number } {
+  const stage = stageRef.value?.getNode?.() as Konva.Stage;
+  if (!stage || nodes.length === 0) {
+    guides.value = { v: false, h: false };
+    return { x: 0, y: 0 };
+  }
+
+  const bg = pageBackgroundConfig.value;
+  const scale = stage.scaleX() || 1;
+  const threshold = SNAP_THRESHOLD_PX / scale;
+
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  nodes.forEach((n) => {
+    const r = (n as any).getClientRect({ skipShadow: true, skipStroke: true, relativeTo: layer });
+    minX = Math.min(minX, r.x); minY = Math.min(minY, r.y);
+    maxX = Math.max(maxX, r.x + r.width); maxY = Math.max(maxY, r.y + r.height);
+  });
+  const groupCenterX = (minX + maxX) / 2;
+  const groupCenterY = (minY + maxY) / 2;
+  const pageCenterX = bg.x + bg.width / 2;
+  const pageCenterY = bg.y + bg.height / 2;
+
+  const snapV = Math.abs(groupCenterX - pageCenterX) < threshold;
+  const snapH = Math.abs(groupCenterY - pageCenterY) < threshold;
+
+  let dx = 0, dy = 0;
+  if (snapV) dx = pageCenterX - groupCenterX;
+  if (snapH) dy = pageCenterY - groupCenterY;
+
+  if (dx !== 0 || dy !== 0) {
+    nodes.forEach((n) => {
+      const pos = n.position();
+      n.position({ x: pos.x + dx, y: pos.y + dy });
+    });
+  }
+  guides.value = { v: snapV, h: snapH };
+
+  return { x: dx, y: dy };
+}
+
+// True when any content on the page extends beyond the page background bounds
+const hasOutOfBoundsContent = ref(false);
+
+function updateOutOfBoundsWarnings() {
+  const stage = stageRef.value?.getNode?.() as Konva.Stage;
+  const layer = contentLayerRef.value?.getNode?.();
+  if (!stage || !layer || !projectStore.currentPage) {
+    hasOutOfBoundsContent.value = false;
+    return;
+  }
+
+  const bg = pageBackgroundConfig.value;
+
+  const anyOutOfBounds = projectStore.currentPage.content.some((c) => {
+    const node = stage.findOne(`#${c.id}`);
+    if (!node) return false;
+
+    let rect;
+    try {
+      rect = (node as any).getClientRect({ skipShadow: true, skipStroke: true, relativeTo: layer });
+    } catch {
+      return false;
+    }
+
+    return (
+      rect.x < bg.x ||
+      rect.y < bg.y ||
+      rect.x + rect.width > bg.x + bg.width ||
+      rect.y + rect.height > bg.y + bg.height
+    );
+  });
+
+  hasOutOfBoundsContent.value = anyOutOfBounds;
+}
 
 function toStagePoint(stage: Konva.Stage, p: {x:number; y:number}) {
   const scale = stage.scaleX();
