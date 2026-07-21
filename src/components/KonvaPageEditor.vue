@@ -229,6 +229,21 @@ const pageBackgroundConfig = computed(() => {
   };
 });
 
+// A second border drawn on top of content when something overflows the page,
+// so the boundary stays visible even when content is layered above it.
+const pageBoundaryHighlightConfig = computed(() => {
+  const bg = pageBackgroundConfig.value;
+  return {
+    x: bg.x,
+    y: bg.y,
+    width: bg.width,
+    height: bg.height,
+    fill: 'transparent',
+    stroke: '#ef4444',
+    strokeWidth: 3,
+    listening: false
+  };
+});
 
 // Build Konva configs from current page content
 const pageNodes = shallowRef<any[]>([]);
@@ -420,7 +435,10 @@ function attachTransformer() {
 }
 
 watch(selectedIds, () => attachTransformer(), { immediate: true });
-watch(pageNodes, () => attachTransformer());
+watch(pageNodes, () => {
+  attachTransformer();
+  nextTick(() => updateOutOfBoundsWarnings());
+});
 
 function selectNode(id: string, e?: any) {
   if (toolsStore.activeTool !== 'select') return;
@@ -518,6 +536,7 @@ function onNodeDragMove(_id: string, e: any) {
 
   const layer = contentLayerRef.value?.getNode?.();
   layer?.batchDraw();
+  updateOutOfBoundsWarnings();
 }
 
 function onDragEnd(id: string, e: any) {
@@ -558,6 +577,7 @@ function onDragEnd(id: string, e: any) {
     node.draggable((node as any)._wasDraggable);
     (node as any)._wasDraggable = undefined;
   }
+  updateOutOfBoundsWarnings();
 }
 
 // Overlay drag to move selection when clicking inside selection bounds (not on a node)
@@ -601,6 +621,7 @@ function onOverlayMouseMove(e: any) {
     snapGroupToCenter(nodes, layer);
 
     layer.batchDraw();
+    updateOutOfBoundsWarnings();
     overlayRaf = null;
   });
   if (e?.evt) e.evt.stopPropagation();
@@ -635,6 +656,7 @@ function onOverlayMouseUp(e: any) {
   groupInitialPos = {};
   if (overlayRaf) { cancelAnimationFrame(overlayRaf); overlayRaf = null; }
   if (e?.evt) e.evt.stopPropagation();
+  updateOutOfBoundsWarnings();
 }
 
 function onWheel(e: any) {
@@ -750,6 +772,7 @@ onMounted(() => {
       projectStore.updateContent(id, { x: pos.x - pageBackgroundConfig.value.x, y: pos.y - pageBackgroundConfig.value.y, width, height, rotation });
     });
     layer.batchDraw();
+    updateOutOfBoundsWarnings();
   });
   try { layer.perfectDrawEnabled(false); } catch {}
 });
@@ -883,6 +906,41 @@ function snapGroupToCenter(nodes: Konva.Node[], layer: Konva.Layer): { x: number
   guides.value = { v: snapV, h: snapH };
 
   return { x: dx, y: dy };
+}
+
+// True when any content on the page extends beyond the page background bounds
+const hasOutOfBoundsContent = ref(false);
+
+function updateOutOfBoundsWarnings() {
+  const stage = stageRef.value?.getNode?.() as Konva.Stage;
+  const layer = contentLayerRef.value?.getNode?.();
+  if (!stage || !layer || !projectStore.currentPage) {
+    hasOutOfBoundsContent.value = false;
+    return;
+  }
+
+  const bg = pageBackgroundConfig.value;
+
+  const anyOutOfBounds = projectStore.currentPage.content.some((c) => {
+    const node = stage.findOne(`#${c.id}`);
+    if (!node) return false;
+
+    let rect;
+    try {
+      rect = (node as any).getClientRect({ skipShadow: true, skipStroke: true, relativeTo: layer });
+    } catch {
+      return false;
+    }
+
+    return (
+      rect.x < bg.x ||
+      rect.y < bg.y ||
+      rect.x + rect.width > bg.x + bg.width ||
+      rect.y + rect.height > bg.y + bg.height
+    );
+  });
+
+  hasOutOfBoundsContent.value = anyOutOfBounds;
 }
 
 function toStagePoint(stage: Konva.Stage, p: {x:number; y:number}) {
