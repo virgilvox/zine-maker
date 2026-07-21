@@ -126,9 +126,6 @@
               :config="{ x: selectionRect.x, y: selectionRect.y, width: selectionRect.width, height: selectionRect.height, stroke: '#2563eb', dash: [4,4], listening: false }"
             />
 
-            <!-- Page boundary warning: drawn above content when something overflows -->
-            <v-rect v-if="hasOutOfBoundsContent" :config="pageBoundaryHighlightConfig" />
-
             <!-- Center snap guides -->
             <v-line v-if="guides.v" :config="centerGuideVConfig" />
             <v-line v-if="guides.h" :config="centerGuideHConfig" />
@@ -519,17 +516,32 @@ function onNodeDragMove(_id: string, e: any) {
   const stage = stageRef.value?.getNode?.();
   const tr = transformerRef.value?.getNode?.();
   if (!stage || !tr) return;
-  const selected = tr.nodes().filter((n: Konva.Node) => n.id() !== node.id());
-  selected.forEach((n: Konva.Node) => {
+  const otherSelected = tr.nodes().filter((n: Konva.Node) => n.id() !== node.id());
+
+  otherSelected.forEach((n: Konva.Node) => {
     const p = n.position();
     n.position({ x: p.x + deltaX, y: p.y + deltaY });
   });
+
+  // Snap the dragged node to center guides, then propagate the snap offset
+  // to the rest of the selection so the whole group stays aligned
+  const snapDelta = snapNodeToCenter(node);
+  if (snapDelta.x !== 0 || snapDelta.y !== 0) {
+    otherSelected.forEach((n: Konva.Node) => {
+      const p = n.position();
+      n.position({ x: p.x + snapDelta.x, y: p.y + snapDelta.y });
+    });
+    (node as any)._prevPos = node.position();
+  }
+
   const layer = contentLayerRef.value?.getNode?.();
   layer?.batchDraw();
   updateOutOfBoundsWarnings();
 }
 
 function onDragEnd(id: string, e: any) {
+  guides.value = { v: false, h: false };
+
   const node = e.target as Konva.Node;
   // Clear per-node temp state
   (node as any)._prevPos = undefined;
@@ -597,11 +609,17 @@ function onOverlayMouseMove(e: any) {
   const tr = transformerRef.value?.getNode?.();
   const nodes = tr ? (tr.nodes() as Konva.Node[]) : [];
   if (overlayRaf !== null) { if (e?.evt) e.evt.stopPropagation(); return; }
+
   overlayRaf = requestAnimationFrame(() => {
+    // Apply raw motion from base positions
     nodes.forEach((n) => {
       const base = groupInitialPos[n.id()];
       if (base) n.position({ x: base.x + dx, y: base.y + dy });
     });
+
+    // Snap the group to center guides, if close enough
+    snapGroupToCenter(nodes, layer);
+
     layer.batchDraw();
     updateOutOfBoundsWarnings();
     overlayRaf = null;
@@ -609,6 +627,7 @@ function onOverlayMouseMove(e: any) {
   if (e?.evt) e.evt.stopPropagation();
 }
 function onOverlayMouseUp(e: any) {
+  guides.value = { v: false, h: false };
   if (!hasSelection.value) { overlayDragStart = null; return; }
   const stage = stageRef.value?.getNode?.();
   if (!stage) { overlayDragStart = null; return; }
